@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lab Bangun Ruang 3D — Matematika Interaktif</title>
+<style>
+  :root{
+    --indigo:#4f46e5; --indigo-dark:#3730a3; --orange:#ea6b0c;
+    --bg:#eef2ff; --card:#ffffff; --text:#1f2937; --muted:#6b7280;
+    --line:#e5e7eb; --green:#15803d; --green-bg:#f0fdf4;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:"Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+    background:var(--bg); color:var(--text);
+  }
+  header{
+    background:linear-gradient(135deg, var(--indigo), var(--indigo-dark));
+    color:#fff; padding:22px 24px; text-align:center;
+  }
+  header h1{margin:0 0 6px; font-size:26px}
+  header p{margin:0; opacity:.9; font-size:14px}
+  main{
+    max-width:1100px; margin:0 auto; padding:20px;
+    display:grid; grid-template-columns:1fr 330px; gap:20px; align-items:start;
+  }
+  @media (max-width:800px){ main{grid-template-columns:1fr} }
+  .panel{background:var(--card); border-radius:16px; box-shadow:0 4px 18px rgba(0,0,0,.08); padding:18px}
+  /* ---- pemilih bangun ---- */
+  .shapes{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px}
+  .shapes button{
+    flex:1; min-width:90px; padding:12px 8px; font-size:15px; font-weight:700;
+    border:2px solid var(--line); border-radius:12px; background:#fff; cursor:pointer;
+    transition:.15s;
+  }
+  .shapes button:hover{border-color:var(--indigo)}
+  .shapes button.active{background:var(--indigo); color:#fff; border-color:var(--indigo)}
+  /* ---- kanvas 3D ---- */
+  #canvas-wrap{
+    position:relative; border-radius:12px; overflow:hidden;
+    background:radial-gradient(circle at 50% 35%, #ffffff, #dbeafe);
+    border:1px solid var(--line);
+  }
+  #scene{width:100%; height:460px; display:block; touch-action:none}
+  #hint{
+    position:absolute; left:12px; bottom:12px; background:rgba(255,255,255,.92);
+    padding:7px 12px; border-radius:999px; font-size:12.5px; color:var(--muted);
+    box-shadow:0 2px 8px rgba(0,0,0,.12);
+  }
+  .row-check{display:flex; gap:18px; margin-top:12px; font-size:14px; flex-wrap:wrap}
+  .row-check label{cursor:pointer; display:flex; align-items:center; gap:6px}
+  /* ---- slider ---- */
+  .slider-group{margin:18px 0}
+  .slider-group label{display:flex; justify-content:space-between; font-weight:700; margin-bottom:6px}
+  .slider-group label span{color:var(--indigo)}
+  input[type=range]{width:100%; accent-color:var(--indigo); cursor:pointer}
+  .scale{font-size:12px; color:var(--muted); display:flex; justify-content:space-between}
+  /* ---- hasil ---- */
+  .result{
+    border-radius:12px; padding:14px 16px; margin-top:14px;
+  }
+  .result.volume{background:#eef2ff; border:1px solid #c7d2fe}
+  .result.surface{background:#fff7ed; border:1px solid #fed7aa}
+  .result .label{font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--muted)}
+  .result .value{font-size:30px; font-weight:800; margin:2px 0}
+  .result .formula{font-size:14px; color:#374151; word-break:break-word}
+  .formula-box{
+    background:var(--green-bg); border:1px solid #bbf7d0; border-radius:12px;
+    padding:14px 16px; margin-top:14px; font-size:14.5px; line-height:1.7;
+  }
+  .formula-box b{color:var(--green)}
+  .tip{
+    background:#fefce8; border:1px solid #fde68a; border-radius:12px;
+    padding:12px 14px; margin-top:14px; font-size:13.5px; line-height:1.6;
+  }
+  footer{text-align:center; color:var(--muted); font-size:12.5px; padding:8px 20px 24px}
+</style>
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<header>
+  <h1>🧊 Lab Bangun Ruang 3D</h1>
+  <p>Geser ukurannya, putar bangunnya, dan lihat volume serta luas permukaan berubah secara langsung!</p>
+</header>
+
+<main>
+  <!-- ============ KOLOM KIRI: VISUAL 3D ============ -->
+  <section class="panel">
+    <div class="shapes" role="tablist" aria-label="Pilih bangun ruang">
+      <button data-shape="kubus" class="active">⬛ Kubus</button>
+      <button data-shape="tabung">🥫 Tabung</button>
+      <button data-shape="bola">⚽ Bola</button>
+    </div>
+
+    <div id="canvas-wrap">
+      <canvas id="scene"></canvas>
+      <div id="hint">🖱️ Seret untuk memutar &nbsp;•&nbsp; Scroll untuk zoom</div>
+    </div>
+
+    <div class="row-check">
+      <label><input type="checkbox" id="chk-rotate" checked> Putar otomatis</label>
+      <label><input type="checkbox" id="chk-wire"> Tampilkan rangka (wireframe)</label>
+    </div>
+  </section>
+
+  <!-- ============ KOLOM KANAN: KONTROL & HASIL ============ -->
+  <section class="panel">
+    <h2 id="shape-title" style="margin:0 0 4px">Kubus</h2>
+    <p id="shape-desc" style="margin:0 0 8px; color:var(--muted); font-size:14px">
+      Bangun ruang sisi datar dengan 6 sisi persegi yang sama besar.
+    </p>
+
+    <!-- Slider Kubus -->
+    <div class="slider-group" data-for="kubus">
+      <label>Panjang sisi (s) <span id="val-sisi">4 cm</span></label>
+      <input type="range" id="rng-sisi" min="1" max="10" step="0.5" value="4">
+      <div class="scale"><span>1 cm</span><span>10 cm</span></div>
+    </div>
+
+    <!-- Slider Tabung -->
+    <div class="slider-group" data-for="tabung" hidden>
+      <label>Jari-jari alas (r) <span id="val-r-tabung">3 cm</span></label>
+      <input type="range" id="rng-r-tabung" min="1" max="8" step="0.5" value="3">
+      <div class="scale"><span>1 cm</span><span>8 cm</span></div>
+      <label style="margin-top:14px">Tinggi (t) <span id="val-t-tabung">6 cm</span></label>
+      <input type="range" id="rng-t-tabung" min="1" max="12" step="0.5" value="6">
+      <div class="scale"><span>1 cm</span><span>12 cm</span></div>
+    </div>
+
+    <!-- Slider Bola -->
+    <div class="slider-group" data-for="bola" hidden>
+      <label>Jari-jari (r) <span id="val-r-bola">4 cm</span></label>
+      <input type="range" id="rng-r-bola" min="1" max="8" step="0.5" value="4">
+      <div class="scale"><span>1 cm</span><span>8 cm</span></div>
+    </div>
+
+    <!-- Hasil -->
+    <div class="result volume">
+      <div class="label">📦 Volume</div>
+      <div class="value" id="out-volume">64 cm³</div>
+      <div class="formula" id="calc-volume">V = s³ = 4³ = 64 cm³</div>
+    </div>
+
+    <div class="result surface">
+      <div class="label">🎁 Luas Permukaan</div>
+      <div class="value" id="out-surface">96 cm²</div>
+      <div class="formula" id="calc-surface">L = 6 × s² = 6 × 4² = 96 cm²</div>
+    </div>
+
+    <div class="formula-box" id="formula-box">
+      <b>Rumus Kubus:</b><br>
+      Volume = s × s × s &nbsp;•&nbsp; Luas Permukaan = 6 × s × s
+    </div>
+
+    <div class="tip" id="tip-box">
+      💡 <b>Coba ini:</b> gandakan panjang sisinya dari 4 cm menjadi 8 cm.
+      Volume berubah dari 64 cm³ menjadi…? (Petunjuk: bukan 2 kali lipat!)
+    </div>
+  </section>
+</main>
+
+<footer>
+  Lab Matematika Bangun Ruang • Disusun oleh Masyithoh Dwi Hajjar Anggraini, S.Pd. — SMP Islam 01 Batu
+  <br>Membutuhkan koneksi internet untuk memuat pustaka Three.js (CDN).
+</footer>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ---------- Data tiap bangun ---------- */
+const SHAPES = {
+  kubus: {
+    title: 'Kubus',
+    desc: 'Bangun ruang sisi datar dengan 6 sisi persegi yang sama besar.',
+    formulas: '<b>Rumus Kubus:</b><br>Volume = s × s × s &nbsp;•&nbsp; Luas Permukaan = 6 × s × s',
+    tip: '💡 <b>Coba ini:</b> gandakan panjang sisinya dari 4 cm menjadi 8 cm. Volume berubah dari 64 cm³ menjadi…? (Petunjuk: bukan 2 kali lipat!)',
+  },
+  tabung: {
+    title: 'Tabung',
+    desc: 'Bangun ruang sisi lengkung dengan dua alas lingkaran yang sejajar dan sama besar.',
+    formulas: '<b>Rumus Tabung:</b><br>Volume = π × r² × t &nbsp;•&nbsp; Luas Permukaan = 2 × π × r × (r + t)',
+    tip: '💡 <b>Coba ini:</b> gandakan jari-jarinya dari 3 cm menjadi 6 cm (tinggi tetap). Volume berubah menjadi berapa kali lipat? Bandingkan dengan saat tingginya yang digandakan!',
+  },
+  bola: {
+    title: 'Bola',
+    desc: 'Bangun ruang sisi lengkung yang semua titik permukaannya berjarak sama dari pusat.',
+    formulas: '<b>Rumus Bola:</b><br>Volume = ⁴⁄₃ × π × r³ &nbsp;•&nbsp; Luas Permukaan = 4 × π × r²',
+    tip: '💡 <b>Coba ini:</b> ubah jari-jari dari 4 cm menjadi 2 cm (dibagi dua). Volume menjadi berapa bagian dari semula? Luas permukaan menjadi berapa bagian?',
+  },
+};
+
+/* ---------- State ---------- */
+let current = 'kubus';
+const params = {
+  kubus:  { s: 4 },
+  tabung: { r: 3, t: 6 },
+  bola:   { r: 4 },
+};
+
+/* ---------- Scene Three.js ---------- */
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 200);
+camera.position.set(9, 7, 11);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 1.2;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.4);
+dirLight.position.set(6, 10, 7);
+scene.add(dirLight);
+
+const grid = new THREE.GridHelper(30, 30, 0x94a3b8, 0xcbd5e1);
+scene.add(grid);
+
+const material = new THREE.MeshStandardMaterial({
+  color: 0x6366f1, roughness: 0.35, metalness: 0.05, transparent: true, opacity: 0.92,
+});
+const wireMaterial = new THREE.MeshBasicMaterial({ wireframe: true, color: 0x312e81 });
+let mesh = null, wire = null, edges = null;
+
+function buildGeometry() {
+  if (current === 'kubus')  return new THREE.BoxGeometry(params.kubus.s, params.kubus.s, params.kubus.s);
+  if (current === 'tabung') return new THREE.CylinderGeometry(params.tabung.r, params.tabung.r, params.tabung.t, 48);
+  return new THREE.SphereGeometry(params.bola.r, 48, 32);
+}
+
+function rebuild() {
+  if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); }
+  if (wire) { scene.remove(wire); wire.geometry.dispose(); }
+  if (edges) { scene.remove(edges); edges.geometry.dispose(); }
+
+  const geo = buildGeometry();
+  mesh = new THREE.Mesh(geo, material);
+  scene.add(mesh);
+
+  wire = new THREE.Mesh(geo, wireMaterial);
+  wire.visible = document.getElementById('chk-wire').checked;
+  scene.add(wire);
+
+  if (current !== 'bola') {
+    edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(geo),
+      new THREE.LineBasicMaterial({ color: 0x1e1b4b })
+    );
+    scene.add(edges);
+  }
+
+  // Sesuaikan posisi grid & jarak kamera dengan ukuran bangun
+  geo.computeBoundingBox();
+  const half = Math.max(
+    Math.abs(geo.boundingBox.max.y), Math.abs(geo.boundingBox.max.x), Math.abs(geo.boundingBox.max.z)
+  );
+  grid.position.y = -half - 0.3;
+  const dist = half * 2.6 + 4;
+  const dir = camera.position.clone().sub(controls.target).normalize();
+  camera.position.copy(dir.multiplyScalar(dist));
+}
+
+/* ---------- Perhitungan ---------- */
+const fmt = (n) => n.toLocaleString('id-ID', { maximumFractionDigits: 2 });
+const PI = Math.PI;
+
+function compute() {
+  if (current === 'kubus') {
+    const s = params.kubus.s;
+    return {
+      volume: s ** 3, surface: 6 * s * s,
+      calcV: `V = s³ = ${fmt(s)}³ = ${fmt(s ** 3)} cm³`,
+      calcL: `L = 6 × s² = 6 × ${fmt(s)}² = ${fmt(6 * s * s)} cm²`,
+    };
+  }
+  if (current === 'tabung') {
+    const { r, t } = params.tabung;
+    return {
+      volume: PI * r * r * t, surface: 2 * PI * r * (r + t),
+      calcV: `V = π × r² × t = π × ${fmt(r)}² × ${fmt(t)} = ${fmt(PI * r * r * t)} cm³`,
+      calcL: `L = 2 × π × r × (r + t) = 2 × π × ${fmt(r)} × (${fmt(r)} + ${fmt(t)}) = ${fmt(2 * PI * r * (r + t))} cm²`,
+    };
+  }
+  const r = params.bola.r;
+  return {
+    volume: (4 / 3) * PI * r ** 3, surface: 4 * PI * r * r,
+    calcV: `V = ⁴⁄₃ × π × r³ = ⁴⁄₃ × π × ${fmt(r)}³ = ${fmt((4 / 3) * PI * r ** 3)} cm³`,
+    calcL: `L = 4 × π × r² = 4 × π × ${fmt(r)}² = ${fmt(4 * PI * r * r)} cm²`,
+  };
+}
+
+function refresh() {
+  const c = compute();
+  document.getElementById('out-volume').textContent = `${fmt(c.volume)} cm³`;
+  document.getElementById('out-surface').textContent = `${fmt(c.surface)} cm²`;
+  document.getElementById('calc-volume').textContent = c.calcV;
+  document.getElementById('calc-surface').textContent = c.calcL;
+  rebuild();
+}
+
+function selectShape(shape) {
+  current = shape;
+  document.querySelectorAll('.shapes button').forEach((b) =>
+    b.classList.toggle('active', b.dataset.shape === shape));
+  document.querySelectorAll('.slider-group').forEach((g) =>
+    g.hidden = g.dataset.for !== shape);
+  const info = SHAPES[shape];
+  document.getElementById('shape-title').textContent = info.title;
+  document.getElementById('shape-desc').textContent = info.desc;
+  document.getElementById('formula-box').innerHTML = info.formulas;
+  document.getElementById('tip-box').innerHTML = info.tip;
+  refresh();
+}
+
+/* ---------- Event listeners ---------- */
+document.querySelectorAll('.shapes button').forEach((b) =>
+  b.addEventListener('click', () => selectShape(b.dataset.shape)));
+
+const bind = (id, labelId, unit, apply) => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => {
+    const v = parseFloat(el.value);
+    document.getElementById(labelId).textContent = `${fmt(v)} ${unit}`;
+    apply(v);
+    refresh();
+  });
+};
+bind('rng-sisi', 'val-sisi', 'cm', (v) => params.kubus.s = v);
+bind('rng-r-tabung', 'val-r-tabung', 'cm', (v) => params.tabung.r = v);
+bind('rng-t-tabung', 'val-t-tabung', 'cm', (v) => params.tabung.t = v);
+bind('rng-r-bola', 'val-r-bola', 'cm', (v) => params.bola.r = v);
+
+document.getElementById('chk-rotate').addEventListener('change', (e) =>
+  controls.autoRotate = e.target.checked);
+document.getElementById('chk-wire').addEventListener('change', (e) => {
+  if (wire) wire.visible = e.target.checked;
+});
+
+/* ---------- Resize & loop ---------- */
+function resize() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+selectShape('kubus');
+
+(function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+})();
+</script>
+</body>
+</html>
